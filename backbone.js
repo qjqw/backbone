@@ -21,7 +21,7 @@
   var previousBackbone = root.Backbone;
 
   // Create local references to array methods we'll want to use later.
-  // 保存 Array 的一些方法，不知道为什么不直接用  Array.prototype.push ，难道是因为代码量小吗..
+  // 保存 Array 的一些方法
   var array = [];
   var push = array.push;
   var slice = array.slice;
@@ -1508,10 +1508,12 @@
   // instead of `application/json` with the model in a param named `model`.
   // Useful when interfacing with server-side languages like **PHP** that make
   // it difficult to read the body of `PUT` requests.
+  // 发请求的模块   默认用 jquery
   Backbone.sync = function(method, model, options) {
     var type = methodMap[method];
 
     // Default options, unless specified.
+    // 设置默认的请求方式（是否支持rest和json..)
     _.defaults(options || (options = {}), {
       emulateHTTP: Backbone.emulateHTTP,
       emulateJSON: Backbone.emulateJSON
@@ -1521,6 +1523,7 @@
     var params = {type: type, dataType: 'json'};
 
     // Ensure that we have a URL.
+    // 确保请求中带有 URL
     if (!options.url) {
       params.url = _.result(model, 'url') || urlError();
     }
@@ -1528,10 +1531,12 @@
     // Ensure that we have the appropriate request data.
     if (options.data == null && model && (method === 'create' || method === 'update' || method === 'patch')) {
       params.contentType = 'application/json';
+      // 把对应的 object 对象转换成 JSON 字符串
       params.data = JSON.stringify(options.attrs || model.toJSON(options));
     }
 
     // For older servers, emulate JSON by encoding the request into an HTML-form.
+    // 如果打开了 emulateJSON，就把 contentType 设置为 application/x-www-form-urlencoded..
     if (options.emulateJSON) {
       params.contentType = 'application/x-www-form-urlencoded';
       params.data = params.data ? {model: params.data} : {};
@@ -1539,17 +1544,22 @@
 
     // For older servers, emulate HTTP by mimicking the HTTP method with `_method`
     // And an `X-HTTP-Method-Override` header.
+    // 如果打开发 emulateHTTP 就把 PUT、DELETE、PATCH 方法用 post 的方式发送过去
     if (options.emulateHTTP && (type === 'PUT' || type === 'DELETE' || type === 'PATCH')) {
       params.type = 'POST';
+      // 如果设置了 emulateJSON 就把请求的方法设置到 data._method 中
       if (options.emulateJSON) params.data._method = type;
+   	  // 先储存 beforeSend
       var beforeSend = options.beforeSend;
       options.beforeSend = function(xhr) {
+      	// 设置 requestHeader
         xhr.setRequestHeader('X-HTTP-Method-Override', type);
         if (beforeSend) return beforeSend.apply(this, arguments);
       };
     }
 
     // Don't process data on a non-GET request.
+    // 如果是 get 请求，不处理数据
     if (params.type !== 'GET' && !options.emulateJSON) {
       params.processData = false;
     }
@@ -1557,6 +1567,7 @@
     // If we're sending a `PATCH` request, and we're in an old Internet Explorer
     // that still has ActiveX enabled by default, override jQuery to use that
     // for XHR instead. Remove this line when jQuery supports `PATCH` on IE8.
+    // 如果是 patch 方法，并且是老版本的IE  就用 ActiveXObejct 发请求
     if (params.type === 'PATCH' && window.ActiveXObject &&
           !(window.external && window.external.msActiveXFilteringEnabled)) {
       params.xhr = function() {
@@ -1566,11 +1577,13 @@
 
     // Make the request, allowing the user to override any Ajax options.
     var xhr = options.xhr = Backbone.ajax(_.extend(params, options));
+    // 触发 request 事件
     model.trigger('request', model, xhr, options);
     return xhr;
   };
 
   // Map from CRUD to HTTP for our default `Backbone.sync` implementation.
+  // 根据设置的方法决定发请求的方式
   var methodMap = {
     'create': 'POST',
     'update': 'PUT',
@@ -1581,6 +1594,7 @@
 
   // Set the default implementation of `Backbone.ajax` to proxy through to `$`.
   // Override this if you'd like to use a different library.
+  // 调用$的 ajax 模块
   Backbone.ajax = function() {
     return Backbone.$.ajax.apply(Backbone.$, arguments);
   };
@@ -1590,18 +1604,25 @@
 
   // Routers map faux-URLs to actions, and fire events when routes are
   // matched. Creating a new one sets its `routes` hash, if not set statically.
+  // Router 用于控制 url
   var Router = Backbone.Router = function(options) {
     options || (options = {});
+    // 如果 options 中传了 routes，就把 routes 放到 'this' 中
     if (options.routes) this.routes = options.routes;
+    // 
     this._bindRoutes();
     this.initialize.apply(this, arguments);
   };
 
   // Cached regular expressions for matching named param parts and splatted
   // parts of route strings.
+  // 匹配 (XXXX) 并获取 XXXX
   var optionalParam = /\((.*?)\)/g;
+  // 匹配 (?:XXXX 也可以匹配 :XXXX
   var namedParam    = /(\(\?)?:\w+/g;
+  // 匹配 n个\ m个\w(字母、数字、下划线)  类似 \\\\XXXX
   var splatParam    = /\*\w+/g;
+  // 匹配 '-{}[]+?.,\^$|# ' 中的字符
   var escapeRegExp  = /[\-{}\[\]+?.,\\\^$|#\s]/g;
 
   // Set up all inheritable **Backbone.Router** properties and methods.
@@ -1609,6 +1630,7 @@
 
     // Initialize is an empty function by default. Override it with your own
     // initialization logic.
+    // 默认的 initialize，防止不传 options 的情况下报错
     initialize: function(){},
 
     // Manually bind a single named route to a callback. For example:
@@ -1685,11 +1707,14 @@
   // [onhashchange](https://developer.mozilla.org/en-US/docs/DOM/window.onhashchange)
   // and URL fragments. If the browser supports neither (old IE, natch),
   // falls back to polling.
+  // 为 router 模拟浏览器的 history 
   var History = Backbone.History = function() {
     this.handlers = [];
+    // 把 checkUrl 绑给 this
     _.bindAll(this, 'checkUrl');
 
     // Ensure that `History` can be used outside of the browser.
+    // 保证 History 对象能在浏览器外使用
     if (typeof window !== 'undefined') {
       this.location = window.location;
       this.history = window.history;
@@ -1697,18 +1722,23 @@
   };
 
   // Cached regex for stripping a leading hash/slash and trailing space.
+  // 匹配 '#XX' '/XX' 'XX  '
   var routeStripper = /^[#\/]|\s+$/g;
 
   // Cached regex for stripping leading and trailing slashes.
+  // 匹配 '/////////XXXX' 或者 'XXXXX////////'
   var rootStripper = /^\/+|\/+$/g;
 
   // Cached regex for detecting MSIE.
+  // 用于判断是不是IE..
   var isExplorer = /msie [\w.]+/;
 
   // Cached regex for removing a trailing slash.
+  // 匹配 以 '/' 结尾的字符串
   var trailingSlash = /\/$/;
 
   // Has the history handling already been started?
+  // 用于判断是否已经调用过 start 方法
   History.started = false;
 
   // Set up all inheritable **Backbone.History** properties and methods.
@@ -1716,10 +1746,13 @@
 
     // The default interval to poll for hash changes, if necessary, is
     // twenty times a second.
+    // 定义 setInterval 的循环时间
     interval: 50,
 
     // Gets the true hash value. Cannot use location.hash directly due to bug
     // in Firefox where location.hash will always be decoded.
+    // 取到当前的 hash，据注释说，不用 location.hash 的原因是如果用这个方法取到
+    // hash，firefox 会把 location.hash 的值解码..
     getHash: function(window) {
       var match = (window || this).location.href.match(/#(.*)$/);
       return match ? match[1] : '';
@@ -1729,37 +1762,53 @@
     // the hash, or the override.
     getFragment: function(fragment, forcePushState) {
       if (fragment == null) {
+      	// 如果要使用 pushState
         if (this._hasPushState || !this._wantsHashChange || forcePushState) {
+          // pathname..
           fragment = this.location.pathname;
+          // 把 root 结尾的 '/' 去掉
           var root = this.root.replace(trailingSlash, '');
+          // 如果在 fragment 的字符串开头找到了 root，就把 root从 fragment 去掉
           if (!fragment.indexOf(root)) fragment = fragment.substr(root.length);
         } else {
+          // 如果不使用 pushState 则直接取到当前 hash
           fragment = this.getHash();
         }
       }
+
+      // 去掉 fragment 开头的 '#' '/' 和 结尾的连续空格
       return fragment.replace(routeStripper, '');
     },
 
     // Start the hash change handling, returning `true` if the current URL matches
     // an existing route, and `false` otherwise.
     start: function(options) {
+      // 如果已经调用过 start 方法，抛出一个异常
       if (History.started) throw new Error("Backbone.history has already been started");
       History.started = true;
 
       // Figure out the initial configuration. Do we need an iframe?
       // Is pushState desired ... is it available?
+      // 设置默认的 root 为 '/'，如果 options 带了 root 值，则用 options 的 root
       this.options          = _.extend({}, {root: '/'}, this.options, options);
       this.root             = this.options.root;
+      // 是否触发 hashChange 事件
       this._wantsHashChange = this.options.hashChange !== false;
+      // 是否使用 HTML5 的 pushState
       this._wantsPushState  = !!this.options.pushState;
+      // 判断浏览器是否支持 pushState
       this._hasPushState    = !!(this.options.pushState && this.history && this.history.pushState);
       var fragment          = this.getFragment();
+      // IE的文档模式
       var docMode           = document.documentMode;
+      // 判断是否是 IE7 及以前的版本
       var oldIE             = (isExplorer.exec(navigator.userAgent.toLowerCase()) && (!docMode || docMode <= 7));
 
       // Normalize root to always include a leading and trailing slash.
+      // 把 root 处理为 '/XXXX/'的格式
       this.root = ('/' + this.root + '/').replace(rootStripper, '/');
 
+      // 如果需要使用历史记录并且是老版本的IE，用 iframe 方法，记录历史
       if (oldIE && this._wantsHashChange) {
         this.iframe = Backbone.$('<iframe src="javascript:0" tabindex="-1" />').hide().appendTo('body')[0].contentWindow;
         this.navigate(fragment);
